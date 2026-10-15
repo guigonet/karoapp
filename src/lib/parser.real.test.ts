@@ -40,6 +40,7 @@ describe('cupom real E DE CASA', () => {
     expect(r.totalCents).toBe(3995)
     expect(r.category).toBe('Mercado')
     expect(r.nfceKey).toBe('42261033030242000691650050002501681066101053')
+    expect(r.items[2].category).toBe('Bebida e cigarro')
     expect(r.items.map((i) => [i.description, i.qty, i.unitCents, i.totalCents])).toEqual([
       ['AGUA MIN STA CATAR.C/GAS', 2, 299, 598],
       ['BISC NESTLE COOKIE GOTAS CHO', 3, 299, 897],

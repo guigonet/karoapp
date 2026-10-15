@@ -46,3 +46,22 @@ input, select {
   min-height: 48px; padding: 0 12px; border-radius: 10px; border: 2px solid var(--card);
   background: #14123a; color: var(--text); font: inherit; font-size: 16px;
 }
+
+/* entra (verde) / sai (vermelho) */
+:root { --green: #4ade80; --red: #f87171; }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0 12px; }
+button.big { min-height: 96px; font-size: 24px; border: 0; color: #052e16; background: var(--green); }
+button.big.out { color: #450a0a; background: var(--red); }
+button.wide { width: 100%; margin-bottom: 16px; }
+button.primary.in { background: var(--green); border-color: var(--green); color: #052e16; }
+button.primary.out { background: var(--red); border-color: var(--red); color: #450a0a; }
+.row { display: flex; justify-content: space-between; }
+input.amount { font-size: 40px; min-height: 72px; font-weight: 700; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+button.tag { min-height: 40px; border-radius: 20px; padding: 0 14px; font-weight: 500; }
+main.in button.tag.on { background: var(--green); border-color: var(--green); color: #052e16; }
+main.out button.tag.on { background: var(--red); border-color: var(--red); color: #450a0a; }
+label.check { display: flex; align-items: center; gap: 10px; }
+label.check input { min-height: 0; width: 22px; height: 22px; accent-color: var(--gold); }

@@ -1,6 +1,8 @@
-import { categorize, type Category } from './categorize'
+import { matchCategory, type Category } from './categorize'
 
 export interface ReceiptItem {
+  /** categoria própria do item, se as regras reconhecerem (ex.: cigarro) */
+  category?: Category
   description: string
   qty: number
   /** valores em centavos */
@@ -93,7 +95,7 @@ function parseItem(line: string): ReceiptItem | null {
     .replace(/\s+/g, ' ')
     .trim()
   if (description.length < 3 || !/[A-Za-zÀ-ÿ]{3}/.test(description)) return null
-  return { description, qty, unitCents, totalCents }
+  return { description, qty, unitCents, totalCents, category: matchCategory(description) ?? undefined }
 }
 
 export function parseReceipt(raw: string): ParsedReceipt {
@@ -108,7 +110,8 @@ export function parseReceipt(raw: string): ParsedReceipt {
     date: findDate(raw),
     totalCents: findTotal(lines),
     items,
-    category: categorize(`${merchant} ${items.map((i) => i.description).join(' ')}`),
+    // a loja define a categoria da nota; os itens (ex.: cigarro) guardam a própria
+    category: matchCategory(merchant) ?? items.map((i) => i.category).find(Boolean) ?? 'Outros',
   }
 }
 

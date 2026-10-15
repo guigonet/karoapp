@@ -1,19 +1,38 @@
 import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Receipt } from './lib/db'
+import { db, getLocation, localDate, type Receipt } from './lib/db'
 import { readText } from './lib/ocr'
 import { scanQr } from './lib/qr'
 import { formatBRL, parseReceipt, toCents } from './lib/parser'
-import { CATEGORIES, type Category } from './lib/categorize'
+import { DEFAULT_IN, DEFAULT_OUT, type Category, type Kind } from './lib/categorize'
 
 type Draft = Omit<Receipt, 'id' | 'createdAt'> & { id?: number }
 
-const today = () => new Date().toISOString().slice(0, 10)
 const monthOf = (d: string) => d.slice(0, 7)
+const fmtWhen = (ms: number) =>
+  new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+const getPref = (k: string) => { try { return localStorage.getItem(k) === '1' } catch { return false } }
+const setPref = (k: string, v: boolean) => { try { localStorage.setItem(k, v ? '1' : '0') } catch { /* sem storage */ } }
+
+/** Valor de cada categoria no mês. Com itens (cupom), cada item conta na própria categoria. */
+function spendByCategory(list: Receipt[]) {
+  const m = new Map<Category, number>()
+  const add = (c: Category, v: number) => m.set(c, (m.get(c) ?? 0) + v)
+  for (const r of list) {
+    const itemSum = r.items.reduce((s, i) => s + i.totalCents, 0)
+    if (itemSum > 0 && itemSum <= r.totalCents) {
+      r.items.forEach((i) => add(i.category ?? r.category, i.totalCents))
+      if (r.totalCents > itemSum) add(r.category, r.totalCents - itemSum)
+    } else add(r.category, r.totalCents)
+  }
+  return m
+}
 
 export function App() {
-  const receipts = useLiveQuery(() => db.receipts.orderBy('date').reverse().toArray(), []) ?? []
+  const receipts = useLiveQuery(() => db.receipts.orderBy('occurredAt').reverse().toArray(), []) ?? []
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [quick, setQuick] = useState<Kind | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -26,17 +45,20 @@ export function App() {
       setBusy('Lendo o cupom… 0%')
       const text = await readText(file, (p) => setBusy(`Lendo o cupom… ${Math.round(p * 100)}%`))
       const p = parseReceipt(text)
+      const now = Date.now()
       setDraft({
+        kind: 'out',
         merchant: p.merchant,
         cnpj: p.cnpj ?? qr?.cnpj ?? null,
-        date: p.date ?? (qr ? `${qr.month}-01` : today()),
+        date: p.date ?? localDate(now),
+        occurredAt: now,
         totalCents: p.totalCents ?? 0,
         category: p.category,
         items: p.items,
         nfceKey: qr?.key ?? p.nfceKey ?? undefined,
       })
     } catch (e) {
-      setError('Não consegui ler a imagem. Tente de novo ou preencha manualmente.')
+      setError('Não consegui ler a imagem. Tente de novo ou use o botão vermelho para lançar o valor.')
       console.error(e)
     } finally {
       setBusy(null)
@@ -52,12 +74,15 @@ export function App() {
     setDraft(null)
   }
 
-  if (draft) return <Review draft={draft} onCancel={() => setDraft(null)} onSave={save} />
+  if (quick) return <QuickEntry kind={quick} receipts={receipts} onDone={() => setQuick(null)} />
+  if (draft) return <Review draft={draft} receipts={receipts} onCancel={() => setDraft(null)} onSave={save} />
 
-  const month = monthOf(today())
-  const monthTotal = receipts.filter((r) => monthOf(r.date) === month).reduce((s, r) => s + r.totalCents, 0)
-  const byCat = new Map<Category, number>()
-  receipts.filter((r) => monthOf(r.date) === month).forEach((r) => byCat.set(r.category, (byCat.get(r.category) ?? 0) + r.totalCents))
+  const month = monthOf(localDate(Date.now()))
+  const thisMonth = receipts.filter((r) => monthOf(r.date) === month)
+  const income = thisMonth.filter((r) => r.kind === 'in').reduce((s, r) => s + r.totalCents, 0)
+  const outList = thisMonth.filter((r) => r.kind === 'out')
+  const spent = outList.reduce((s, r) => s + r.totalCents, 0)
+  const byCat = spendByCategory(outList)
 
   return (
     <main>
@@ -66,9 +91,23 @@ export function App() {
         <h1>KaRo</h1>
       </header>
 
+      <div className="duo">
+        <button className="big in" disabled={!!busy} onClick={() => setQuick('in')}>＋ Entrou</button>
+        <button className="big out" disabled={!!busy} onClick={() => setQuick('out')}>− Gastei</button>
+      </div>
+
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onPhoto(f) }} />
+      <button className="wide" disabled={!!busy} onClick={() => fileRef.current?.click()}>
+        {busy ?? '📷 Ler cupom fiscal'}
+      </button>
+      {error && <p className="error">{error}</p>}
+
       <section className="card total">
-        <small>Gasto em {new Date().toLocaleDateString('pt-BR', { month: 'long' })}</small>
-        <strong>{formatBRL(monthTotal)}</strong>
+        <small>Em {new Date().toLocaleDateString('pt-BR', { month: 'long' })}</small>
+        <div className="row"><span>Entrou</span><b className="pos">{formatBRL(income)}</b></div>
+        <div className="row"><span>Gastou</span><b className="neg">{formatBRL(spent)}</b></div>
+        <div className="row"><span>Saldo</span><b className={income - spent < 0 ? 'neg' : 'pos'}>{formatBRL(income - spent)}</b></div>
         <ul className="cats">
           {[...byCat.entries()].sort((a, b) => b[1] - a[1]).map(([c, v]) => (
             <li key={c}><span>{c}</span><span>{formatBRL(v)}</span></li>
@@ -76,25 +115,16 @@ export function App() {
         </ul>
       </section>
 
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden
-        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onPhoto(f) }} />
-      <div className="actions">
-        <button className="primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
-          {busy ?? '📷 Ler cupom'}
-        </button>
-        <button disabled={!!busy} onClick={() => setDraft({ merchant: '', cnpj: null, date: today(), totalCents: 0, category: 'Outros', items: [] })}>
-          Lançar manual
-        </button>
-      </div>
-      {error && <p className="error">{error}</p>}
-
       <h2>Lançamentos</h2>
-      {receipts.length === 0 && <p className="muted">Nenhum cupom ainda. Fotografe o primeiro!</p>}
+      {receipts.length === 0 && <p className="muted">Nada ainda. Toque em Entrou ou Gastou.</p>}
       <ul className="list">
         {receipts.map((r) => (
           <li key={r.id} onClick={() => setDraft(r)}>
-            <div><b>{r.merchant || 'Sem nome'}</b><small>{r.date.split('-').reverse().join('/')} · {r.category}</small></div>
-            <span>{formatBRL(r.totalCents)}</span>
+            <div>
+              <b>{r.merchant || r.category}</b>
+              <small>{r.merchant ? `${r.category} · ` : ''}{fmtWhen(r.occurredAt)}{r.location ? ' · 📍' : ''}</small>
+            </div>
+            <span className={r.kind === 'in' ? 'pos' : 'neg'}>{r.kind === 'in' ? '+' : '−'}{formatBRL(r.totalCents)}</span>
           </li>
         ))}
       </ul>
@@ -102,23 +132,88 @@ export function App() {
   )
 }
 
-function Review({ draft, onSave, onCancel }: { draft: Draft; onSave: (d: Draft) => void; onCancel: () => void }) {
+/** Categorias da pessoa: padrão + as que ela já usou, mais usadas primeiro. */
+function tagsFor(kind: Kind, receipts: Receipt[]) {
+  const count = new Map<Category, number>()
+  receipts.filter((r) => r.kind === kind).forEach((r) => count.set(r.category, (count.get(r.category) ?? 0) + 1))
+  const base = kind === 'in' ? DEFAULT_IN : DEFAULT_OUT
+  const all = [...new Set([...count.keys(), ...base])]
+  return all.sort((a, b) => (count.get(b) ?? 0) - (count.get(a) ?? 0) || base.indexOf(a) - base.indexOf(b))
+}
+
+function QuickEntry({ kind, receipts, onDone }: { kind: Kind; receipts: Receipt[]; onDone: () => void }) {
+  const [amount, setAmount] = useState('')
+  const [category, setCategory] = useState<Category | null>(null)
+  const [adding, setAdding] = useState('')
+  const [note, setNote] = useState('')
+  const [useLoc, setUseLoc] = useState(() => getPref('karo.loc'))
+  const [saving, setSaving] = useState(false)
+  const cents = toCents(amount.includes(',') ? amount : `${amount || 0},00`)
+  const tags = tagsFor(kind, receipts)
+  const finalCat = adding.trim() || category
+  const valid = Number.isFinite(cents) && cents > 0 && !!finalCat
+
+  async function save() {
+    setSaving(true)
+    const now = Date.now()
+    const location = useLoc ? await getLocation() : undefined
+    await db.receipts.add({
+      kind, merchant: note.trim(), cnpj: null, date: localDate(now), occurredAt: now, totalCents: cents,
+      category: finalCat!, items: [], location, createdAt: now,
+    })
+    onDone()
+  }
+
+  return (
+    <main className={kind}>
+      <h1>{kind === 'in' ? 'Entrou' : 'Gastei'}</h1>
+      <label>Valor (R$)
+        <input className={`amount ${kind === 'in' ? 'pos' : 'neg'}`} inputMode="decimal" autoFocus placeholder="0,00"
+          value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d,]/g, ''))} />
+      </label>
+      <div className="muted">{kind === 'in' ? 'De onde veio?' : 'Com o quê?'}</div>
+      <div className="tags">
+        {tags.map((t) => (
+          <button key={t} className={`tag ${category === t && !adding ? 'on' : ''}`} onClick={() => { setCategory(t); setAdding('') }}>{t}</button>
+        ))}
+      </div>
+      <label>Ou crie uma categoria nova
+        <input value={adding} placeholder="Ex.: Manicure" onChange={(e) => setAdding(e.target.value)} />
+      </label>
+      <label>Observação (opcional)
+        <input value={note} placeholder="Ex.: pix para a Ana" onChange={(e) => setNote(e.target.value)} />
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={useLoc} onChange={(e) => { setUseLoc(e.target.checked); setPref('karo.loc', e.target.checked) }} />
+        Guardar o local do lançamento (só fica no seu aparelho)
+      </label>
+      <div className="actions">
+        <button className={`primary ${kind}`} disabled={!valid || saving} onClick={save}>{saving ? 'Salvando…' : 'Salvar'}</button>
+        <button onClick={onDone}>Cancelar</button>
+      </div>
+    </main>
+  )
+}
+
+function Review({ draft, receipts, onSave, onCancel }: { draft: Draft; receipts: Receipt[]; onSave: (d: Draft) => void; onCancel: () => void }) {
   const [d, setD] = useState(draft)
   const [total, setTotal] = useState((d.totalCents / 100).toFixed(2).replace('.', ','))
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }))
   const cents = toCents(total.includes(',') ? total : `${total},00`)
-  const valid = d.merchant.trim() && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && Number.isFinite(cents) && cents > 0
+  const valid = (d.kind === 'in' || d.merchant.trim()) && /^\d{4}-\d{2}-\d{2}$/.test(d.date) && Number.isFinite(cents) && cents > 0
+  const tags = tagsFor(d.kind, receipts)
+  if (!tags.includes(d.category)) tags.unshift(d.category)
 
   return (
     <main>
       <h1>Conferir</h1>
       <p className="muted">Confira o que o leitor entendeu e corrija o que precisar.</p>
-      <label>Loja<input value={d.merchant} onChange={(e) => set('merchant', e.target.value)} /></label>
+      <label>{d.kind === 'in' ? 'Descrição' : 'Loja'}<input value={d.merchant} onChange={(e) => set('merchant', e.target.value)} /></label>
       <label>Data<input type="date" value={d.date} onChange={(e) => set('date', e.target.value)} /></label>
       <label>Total (R$)<input inputMode="decimal" value={total} onChange={(e) => setTotal(e.target.value)} /></label>
       <label>Categoria
-        <select value={d.category} onChange={(e) => set('category', e.target.value as Category)}>
-          {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+        <select value={d.category} onChange={(e) => set('category', e.target.value)}>
+          {tags.map((c) => <option key={c}>{c}</option>)}
         </select>
       </label>
       {d.items.length > 0 && (
@@ -126,11 +221,15 @@ function Review({ draft, onSave, onCancel }: { draft: Draft; onSave: (d: Draft) 
           <h2>Itens ({d.items.length})</h2>
           <ul className="list items">
             {d.items.map((it, i) => (
-              <li key={i}><div><b>{it.description}</b><small>{it.qty} × {formatBRL(it.unitCents)}</small></div><span>{formatBRL(it.totalCents)}</span></li>
+              <li key={i}>
+                <div><b>{it.description}</b><small>{it.qty} × {formatBRL(it.unitCents)}{it.category ? ` · ${it.category}` : ''}</small></div>
+                <span>{formatBRL(it.totalCents)}</span>
+              </li>
             ))}
           </ul>
         </>
       )}
+      <small className="muted">Lançado em {fmtWhen(d.occurredAt)}</small>
       <div className="actions">
         <button className="primary" disabled={!valid} onClick={() => onSave({ ...d, merchant: d.merchant.trim(), totalCents: cents })}>Salvar</button>
         <button onClick={onCancel}>Cancelar</button>
