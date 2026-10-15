@@ -6,7 +6,7 @@ import { scanQr } from './lib/qr'
 import { formatBRL, parseReceipt, toCents } from './lib/parser'
 import { looksLikeProof, parseProof } from './lib/proof'
 import { DEFAULT_IN, DEFAULT_OUT, TRANSFER, type Category, type Kind } from './lib/categorize'
-import { confirmDialog } from './Dialog'
+import { chooseDialog, confirmDialog } from './Dialog'
 import { doubts } from './lib/doubt'
 import { AIError, aiConsent, debugActive, docToDraft, readWithAI, setAiConsent } from './lib/ai'
 
@@ -44,7 +44,20 @@ export function App() {
   const [version, setVersion] = useState(0)
   const [log, setLog] = useState<string[]>([])
   const camRef = useRef<HTMLInputElement>(null)
+  const galRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  async function attach() {
+    const where = await chooseDialog({
+      title: 'Anexar de onde?',
+      choices: [
+        { value: 'gallery', label: '🖼️ Galeria e prints', hint: 'Fotos recentes, capturas de tela e álbuns' },
+        { value: 'files', label: '📄 PDF ou arquivo', hint: 'Downloads e documentos recentes' },
+      ],
+    })
+    if (where === 'gallery') galRef.current?.click()
+    if (where === 'files') fileRef.current?.click()
+  }
 
   async function onFile(input: File) {
     setError(null)
@@ -198,13 +211,17 @@ export function App() {
 
       <input ref={camRef} type="file" accept="image/*" capture="environment" hidden
         onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f) }} />
-      <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden
+      {/* Dois seletores de propósito: só imagens abre a galeria do celular (recentes, capturas de tela, álbuns);
+          só PDF abre o gerenciador de arquivos (recentes, Downloads). Misturar os dois tipos abre só o gerenciador. */}
+      <input ref={galRef} type="file" accept="image/*" hidden
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f) }} />
+      <input ref={fileRef} type="file" accept="application/pdf" hidden
         onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f) }} />
       <div className="shoot">
         <button className="cam" disabled={!!busy} onClick={() => camRef.current?.click()} aria-label="Fotografar cupom">
           <span aria-hidden>📷</span>{busy ?? 'Fotografar cupom'}
         </button>
-        <button className="clip" disabled={!!busy} onClick={() => fileRef.current?.click()} aria-label="Anexar print ou PDF">
+        <button className="clip" disabled={!!busy} onClick={attach} aria-label="Anexar print ou PDF">
           <span aria-hidden>📎</span>
         </button>
       </div>
