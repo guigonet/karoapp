@@ -243,7 +243,7 @@ function Review({ draft, receipts, onSave, onCancel }: { draft: Draft; receipts:
         <button className={`big in ${d.kind === 'in' ? '' : 'off'}`} onClick={() => set('kind', 'in')}>＋ Entrou</button>
         <button className={`big out ${d.kind === 'out' ? '' : 'off'}`} onClick={() => set('kind', 'out')}>− Gastei</button>
       </div>
-      <label>{d.kind === 'in' ? 'Descrição' : 'Loja'}<input value={d.merchant} onChange={(e) => set('merchant', e.target.value)} /></label>
+      <label>{d.kind === 'in' ? 'Descrição' : 'Loja'}<input value={d.merchant} placeholder={d.kind === 'in' ? 'Ex.: Pagamento de cliente' : 'Digite o nome da loja'} onChange={(e) => set('merchant', e.target.value)} /></label>
       <label>Data<input type="date" value={d.date} onChange={(e) => set('date', e.target.value)} /></label>
       <label>Total (R$)<input inputMode="decimal" value={total} onChange={(e) => setTotal(e.target.value)} /></label>
       <label>Categoria

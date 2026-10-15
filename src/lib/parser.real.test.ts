@@ -31,6 +31,17 @@ Enissao: 13/10/2026 13:13:07
 VENDA PIX COXHPRA-==
 VALOR TOTAL R$ 39 95`
 
+describe('nome da loja', () => {
+  it('não confunde o cabeçalho da tabela com a loja (caso real do celular)', () => {
+    const r = parseReceipt(') UM UNIT TOTAL\nGS ESCRICAO h oTDE UNI! 1 UNID 2,99 2,99\nVALOR TOTAL R$ 39,95')
+    expect(r.merchant).toBe('')
+  })
+  it('prefere a linha com cara de empresa', () => {
+    const r = parseReceipt('Via do cliente\nMERCADO SAO JOSE LTDA\nCNPJ 33.030.242/0006-91')
+    expect(r.merchant).toBe('MERCADO SAO JOSE LTDA')
+  })
+})
+
 describe('cupom real E DE CASA', () => {
   it('lê o cupom limpo', () => {
     const r = parseReceipt(LIMPO)

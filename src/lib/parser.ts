@@ -98,9 +98,22 @@ function parseItem(line: string): ReceiptItem | null {
   return { description, qty, unitCents, totalCents, category: matchCategory(description) ?? undefined }
 }
 
+const HEADER = /\b(QTDE?|UNIT|TOTAL|DESCRI[CÇ][AÃ]O|C[OÓ]DIGO|UNID|VALOR|DOCUMENTO|CONSUMIDOR|NOTA FISCAL|CUPOM)\b/i
+const BIZ = /(LTDA|S\.?\s?A\b|EIRELI|\bME\b|EPP|SUPERMERCADO|MERCADO|POSTO|FARMACIA|DROGARIA|RESTAURANTE|PADARIA|LANCHONETE|ATACAD)/i
+
+/** Nome da loja: linha do topo que parece nome de empresa. Se o OCR só trouxe lixo, devolve '' para a pessoa digitar. */
+function findMerchant(lines: string[]) {
+  const ok = (l: string) => {
+    const letters = (l.match(/[A-Za-zÀ-ÿ]/g) ?? []).length
+    return letters >= 6 && letters / l.length >= 0.6 && !HEADER.test(l) && !/^(CNPJ|CPF|IE\b|\W*\d)/i.test(l)
+  }
+  const head = lines.slice(0, 8).filter(ok)
+  return head.find((l) => BIZ.test(l)) ?? head[0] ?? ''
+}
+
 export function parseReceipt(raw: string): ParsedReceipt {
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const merchant = lines.find((l) => /[A-Za-zÀ-ÿ]{4}/.test(l) && !/^(CNPJ|CPF|DOCUMENTO|NFC|\W*\d)/i.test(l)) ?? ''
+  const merchant = findMerchant(lines)
   const nfceKey = findKey(raw)
   const items = lines.map(parseItem).filter((i): i is ReceiptItem => !!i)
   return {
