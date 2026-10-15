@@ -11,6 +11,8 @@ export interface ReceiptItem {
 export interface ParsedReceipt {
   merchant: string
   cnpj: string | null
+  /** chave de acesso de 44 dígitos, se aparecer impressa */
+  nfceKey: string | null
   /** AAAA-MM-DD */
   date: string | null
   /** centavos */
@@ -20,7 +22,7 @@ export interface ParsedReceipt {
 }
 
 const MONEY = /(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})(?!\d)/g
-const UNIT = '(?:UN|KG|L|PC|CX)'
+const UNIT = '(?:UNID|UN|KG|L|PC|CX)'
 
 export const toCents = (s: string) => {
   const m = s.match(/^(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})$/)
@@ -30,6 +32,12 @@ export const toCents = (s: string) => {
 function findCnpj(text: string) {
   const m = text.match(/\b(\d{2})\.?(\d{3})\.?(\d{3})\/?(\d{4})-?(\d{2})\b/)
   return m ? `${m[1]}.${m[2]}.${m[3]}/${m[4]}-${m[5]}` : null
+}
+
+/** Chave de acesso impressa: 44 dígitos em grupos de 4 separados por espaço. */
+function findKey(raw: string) {
+  const m = raw.match(/(?<!\d)(?:\d{4} ?){10}\d{4}(?!\d)/)
+  return m ? m[0].replace(/\s/g, '') : null
 }
 
 function findDate(text: string) {
@@ -42,13 +50,24 @@ function findDate(text: string) {
   return null
 }
 
+function lineMoney(line: string) {
+  const vals = [...line.matchAll(MONEY)].map((m) => toCents(m[0]))
+  if (vals.length) return vals[vals.length - 1]
+  // OCR às vezes troca a vírgula por espaço ("39 95") na linha do total
+  const m = line.match(/(\d{1,3}(?:\.\d{3})*|\d+)[ .](\d{2})\s*$/)
+  return m ? parseInt(m[1].replace(/\./g, '') + m[2], 10) : null
+}
+
 function findTotal(lines: string[]) {
-  const key = /(VALOR\s*TOTAL|TOTAL\s*(A\s*PAGAR|R\$|GERAL)?|A\s*PAGAR)/i
-  const skip = /(SUBTOTAL|DESCONTO|TROCO|TRIBUT|IMPOSTO|DINHEIRO|CART)/i
+  const key = /(VALOR\s*TOTAL|TOTAL\s*(A\s*PAGAR|R\$|GERAL)|A\s*PAGAR)/i
+  const skip = /(SUBTOTAL|DESCONTO|TROCO|TRIBUT|IMPOSTO|DINHEIRO|CART|ITENS|VALOR\s*PAG)/i
+  const onlyMoney = /^[R$\s]*[\d.]+[,\s]\d{2}$/
   for (let i = lines.length - 1; i >= 0; i--) {
     if (!key.test(lines[i]) || skip.test(lines[i])) continue
-    const vals = [...lines[i].matchAll(MONEY)].map((m) => toCents(m[0]))
-    if (vals.length) return vals[vals.length - 1]
+    const v = lineMoney(lines[i])
+    if (v !== null) return v
+    // valor impresso em coluna: na linha anterior ou seguinte
+    for (const j of [i - 1, i + 1]) if (lines[j] && onlyMoney.test(lines[j])) return lineMoney(lines[j])
   }
   // plano B: maior valor do cupom
   const all = lines.flatMap((l) => [...l.matchAll(MONEY)].map((m) => toCents(m[0])))
@@ -57,12 +76,13 @@ function findTotal(lines: string[]) {
 
 /** Linha de item: "001 7891000100103 LEITE INTEGRAL 2 UN x 4,99 9,98" (e variações). */
 function parseItem(line: string): ReceiptItem | null {
-  if (/TOTAL|TROCO|DESCONTO|CNPJ|CPF|DINHEIRO|CART|TRIBUT/i.test(line)) return null
+  if (/TOTAL|TROCO|DESCONTO|CNPJ|CPF|DINHEIRO|CART|TRIBUT|PIX|CREDITO|DEBITO|PAGAMENTO|PAGO|VOUCHER/i.test(line)) return null
   const prices = [...line.matchAll(MONEY)]
   if (!prices.length) return null
   const totalCents = toCents(prices[prices.length - 1][0])
   const unitCents = prices.length > 1 ? toCents(prices[prices.length - 2][0]) : totalCents
-  const qtyRe = new RegExp(`(\\d+(?:,\\d{1,3})?)\\s*${UNIT}?\\s*[xX*]\\s*$`, 'i')
+  // "2 UN x", "2 UNID" (sem x) ou "2 x"
+  const qtyRe = new RegExp(`(\\d+(?:,\\d{1,3})?)\\s*(?:${UNIT}\\s*[xX*]?|[xX*])\\s*$`, 'i')
   const head = line.slice(0, prices[0].index)
   const qtyM = head.match(qtyRe)
   const qty = qtyM ? parseFloat(qtyM[1].replace(',', '.')) : 1
@@ -78,11 +98,13 @@ function parseItem(line: string): ReceiptItem | null {
 
 export function parseReceipt(raw: string): ParsedReceipt {
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const merchant = lines.find((l) => /[A-Za-zÀ-ÿ]{4}/.test(l) && !/^(CNPJ|CPF|DOCUMENTO|NFC)/i.test(l)) ?? ''
+  const merchant = lines.find((l) => /[A-Za-zÀ-ÿ]{4}/.test(l) && !/^(CNPJ|CPF|DOCUMENTO|NFC|\W*\d)/i.test(l)) ?? ''
+  const nfceKey = findKey(raw)
   const items = lines.map(parseItem).filter((i): i is ReceiptItem => !!i)
   return {
     merchant,
-    cnpj: findCnpj(raw),
+    nfceKey,
+    cnpj: findCnpj(raw) ?? (nfceKey ? findCnpj(nfceKey.slice(6, 20)) : null),
     date: findDate(raw),
     totalCents: findTotal(lines),
     items,

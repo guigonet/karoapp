@@ -33,7 +33,7 @@ export function App() {
         totalCents: p.totalCents ?? 0,
         category: p.category,
         items: p.items,
-        nfceKey: qr?.key,
+        nfceKey: qr?.key ?? p.nfceKey ?? undefined,
       })
     } catch (e) {
       setError('Não consegui ler a imagem. Tente de novo ou preencha manualmente.')
