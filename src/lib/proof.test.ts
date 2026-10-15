@@ -55,6 +55,14 @@ describe('parseProof', () => {
     expect(new Date(r.occurredAt!).getMinutes()).toBe(6)
   })
 
+  it('Nubank de 15/10: valor, hora do Pix e transferência própria (print real)', () => {
+    const t = `Comprovante de\ntransferência\n15 OUT 2026 - 16:10:04\nValor R$ 20,00\nTipo de transferência Pix\nDestino\nNome Rodrigo Brito de Oliveira\nCPF +» 388.498 ---\nInstituição BCO BRADESCO S.A.\nOrigem\nNome RODRIGO BRITO DE OLIVEIRA\n29338849848\nInstituição NU PAGAMENTOS - IP`
+    const r = parseProof(t)
+    expect(r).toMatchObject({ totalCents: 2000, date: '2026-10-15', ownTransfer: true })
+    const d = new Date(r.occurredAt!)
+    expect([d.getHours(), d.getMinutes(), d.getSeconds()]).toEqual([16, 10, 4])
+  })
+
   it('formas curtas: "Para <nome>" e Pix recebido', () => {
     expect(parseProof('Pix enviado\nR$ 150,00\nPara\nAna Souza\nCPF ***.123.456-**\n13/10/2026')).toMatchObject({ kind: 'out', who: 'Ana Souza', totalCents: 15000 })
     expect(parseProof('Você recebeu um Pix\nR$ 1.200,50\nDe Carlos Lima\n05/10/2026')).toMatchObject({ kind: 'in', who: 'Carlos Lima', totalCents: 120050 })
