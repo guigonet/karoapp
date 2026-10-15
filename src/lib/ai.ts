@@ -72,6 +72,7 @@ const safe = {
 
 export const aiConsent = () => safe.get('karo.aiConsent') === '1'
 export const setAiConsent = () => safe.set('karo.aiConsent', '1')
+export const clearAiConsent = () => safe.del('karo.aiConsent')
 export const aiToken = () => safe.get('karo.aiToken') ?? ''
 export const setAiToken = (t: string) => safe.set('karo.aiToken', t.trim())
 

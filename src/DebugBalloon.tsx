@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { confirmDialog, promptDialog } from './Dialog'
-import { aiToken, getStats, resetStats, setAiToken } from './lib/ai'
+import { aiConsent, aiToken, clearAiConsent, getStats, resetStats, setAiToken } from './lib/ai'
 
 /** Balão vermelho de teste: quanto a leitura com IA já custou neste aparelho. Só aparece com ?debug=1. */
 export function DebugBalloon() {
@@ -23,6 +23,13 @@ export function DebugBalloon() {
     })
     if (t === null) return
     setAiToken(t)
+    // para testar a caixa de aviso de novo, sem precisar limpar os dados do navegador
+    if (aiConsent() && (await confirmDialog({
+      title: 'Ver o aviso da IA de novo?',
+      body: 'Você já aceitou o aviso de privacidade neste aparelho. Se escolher "Ver de novo", ele aparece no próximo ✨ Ler com IA.',
+      confirmLabel: 'Ver de novo',
+      cancelLabel: 'Deixar assim',
+    }))) clearAiConsent()
     if (s.calls > 0 && (await confirmDialog({ title: 'Zerar o contador de gasto?', confirmLabel: 'Zerar', cancelLabel: 'Manter' }))) resetStats()
   }
 
