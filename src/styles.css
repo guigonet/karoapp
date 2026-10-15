@@ -127,3 +127,22 @@ button.balloon { top: calc(8px + env(safe-area-inset-top)); bottom: auto; }
 body.debug main { padding-bottom: calc(32px + env(safe-area-inset-bottom)); padding-top: 40px; }
 
 p.small { font-size: 14px; margin: 0 0 8px; }
+
+/* tela de entrada: vermelha, cabe numa tela só */
+main.welcome {
+  max-width: none; min-height: 100dvh; margin: 0; padding: calc(16px + env(safe-area-inset-top)) 20px calc(16px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 10px; background: #991b1b; color: #fff;
+}
+.welcome header { display: flex; align-items: center; gap: 12px; }
+.welcome h1 { color: #fff; margin: 0; font-size: 30px; }
+.welcome .beta { background: #fff; color: #991b1b; font: 800 14px ui-monospace, 'Courier New', monospace; letter-spacing: 2px; padding: 4px 10px; border-radius: 6px; }
+.welcome .lead { margin: 0; font-size: 18px; font-weight: 700; }
+.welcome ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; flex: 1; align-content: start; }
+.welcome li { background: rgba(0, 0, 0, 0.22); border-radius: 10px; padding: 10px 12px; font-size: 15px; line-height: 1.35; }
+.welcome li b { display: block; margin-bottom: 2px; font-size: 15px; }
+.welcome label.agree { display: flex; align-items: center; gap: 12px; margin: 4px 0 0; color: #fff; font-size: 16px; font-weight: 600; }
+.welcome label.agree input { width: 28px; height: 28px; min-height: 0; flex: none; accent-color: #fcd34d; }
+.welcome button.enter { min-height: 54px; background: #fff; border-color: #fff; color: #991b1b; font-size: 18px; }
+.welcome button.enter:disabled { opacity: 0.45; }
+.welcome button:focus-visible, .welcome input:focus-visible { outline-color: #fcd34d; }
+@media (max-height: 700px) { .welcome li, .welcome li b { font-size: 14px; } .welcome { gap: 8px; } }

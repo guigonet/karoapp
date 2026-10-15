@@ -7,6 +7,7 @@ import { formatBRL, parseReceipt, toCents } from './lib/parser'
 import { looksLikeProof, parseProof } from './lib/proof'
 import { DEFAULT_IN, DEFAULT_OUT, TRANSFER, type Category, type Kind } from './lib/categorize'
 import { chooseDialog, confirmDialog, infoDialog } from './Dialog'
+import { TERMS } from './Terms'
 import { backupFileName, buildBackup, newOnes, parseBackup } from './lib/backup'
 import { doubts } from './lib/doubt'
 import { AIError, aiConsent, debugActive, docToDraft, readWithAI, setAiConsent } from './lib/ai'
@@ -341,6 +342,9 @@ export function App() {
         <button onClick={() => void exportBackup()} disabled={receipts.length === 0}>⬇️ Exportar backup</button>
         <button onClick={() => importRef.current?.click()}>⬆️ Importar backup</button>
       </div>
+      <button className="wide" onClick={() => void infoDialog('Condições de uso (beta)', TERMS.map((t) => `${t.title}\n${t.text}`).join('\n\n'))}>
+        📄 Condições de uso
+      </button>
     </main>
   )
 }
