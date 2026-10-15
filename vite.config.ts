@@ -7,9 +7,20 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // service worker próprio (src/sw.ts): precisa tratar o POST do menu "Compartilhar"
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png}'], maximumFileSizeToCacheInBytes: 5_000_000 },
+      injectManifest: { globPatterns: ['**/*.{js,css,html,svg,png}'], maximumFileSizeToCacheInBytes: 5_000_000 },
       manifest: {
+        // aparece no "Compartilhar" do Android (banco, WhatsApp, galeria) para imagens e PDF
+        share_target: {
+          action: '/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: { files: [{ name: 'file', accept: ['image/*', 'application/pdf', '.pdf'] }] },
+        },
         name: 'KaRo',
         short_name: 'KaRo',
         description: 'Finanças pessoais com leitura de cupom fiscal, tudo no seu aparelho.',

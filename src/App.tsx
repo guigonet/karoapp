@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, findRule, getLocation, learnRule, localDate, type Receipt } from './lib/db'
 import { readText } from './lib/ocr'
@@ -46,6 +46,27 @@ export function App() {
   const camRef = useRef<HTMLInputElement>(null)
   const galRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Arquivo vindo do menu "Compartilhar" do celular: o service worker guardou no cache e abriu /?shared=1
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('shared')) return
+    history.replaceState(null, '', '/')
+    ;(async () => {
+      try {
+        const cache = await caches.open('karo-shared')
+        const res = await cache.match('/shared-file')
+        if (!res) return
+        const blob = await res.blob()
+        await cache.delete('/shared-file')
+        const name = decodeURIComponent(res.headers.get('x-filename') ?? 'compartilhado')
+        void onFile(new File([blob], name, { type: blob.type }))
+      } catch (e) {
+        console.error(e)
+      }
+    })()
+    // roda uma vez ao abrir o app
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function attach() {
     const where = await chooseDialog({
