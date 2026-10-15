@@ -42,7 +42,7 @@ function findKey(raw: string) {
   return m ? m[0].replace(/\s/g, '') : null
 }
 
-function findDate(text: string) {
+export function findDate(text: string) {
   for (const m of text.matchAll(/\b(\d{2})[/.-](\d{2})[/.-](\d{4}|\d{2})\b/g)) {
     const d = +m[1], mo = +m[2]
     const y = m[3].length === 2 ? 2000 + +m[3] : +m[3]

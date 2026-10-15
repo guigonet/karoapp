@@ -4,6 +4,7 @@ import { db, getLocation, localDate, type Receipt } from './lib/db'
 import { readText } from './lib/ocr'
 import { scanQr } from './lib/qr'
 import { formatBRL, parseReceipt, toCents } from './lib/parser'
+import { looksLikeProof, parseProof } from './lib/proof'
 import { DEFAULT_IN, DEFAULT_OUT, type Category, type Kind } from './lib/categorize'
 
 type Draft = Omit<Receipt, 'id' | 'createdAt'> & { id?: number }
@@ -35,17 +36,36 @@ export function App() {
   const [quick, setQuick] = useState<Kind | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const camRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  async function onPhoto(file: File) {
+  async function onFile(input: File) {
     setError(null)
     try {
-      setBusy('Procurando QR code…')
-      const qr = await scanQr(file).catch(() => null)
-      setBusy('Lendo o cupom… 0%')
-      const text = await readText(file, (p) => setBusy(`Lendo o cupom… ${Math.round(p * 100)}%`))
-      const p = parseReceipt(text)
       const now = Date.now()
+      let file: Blob = input
+      let text = ''
+      if (input.type === 'application/pdf') {
+        setBusy('Lendo o PDF…')
+        const { pdfText, pdfToImage } = await import('./lib/pdf')
+        text = await pdfText(input)
+        if (text.replace(/\s/g, '').length < 30) file = await pdfToImage(input) // PDF escaneado: cai no OCR
+      }
+      const qr = file.type.startsWith('image/') ? await scanQr(file).catch(() => null) : null
+      if (!text) {
+        setBusy('Lendo… 0%')
+        text = await readText(file, (p) => setBusy(`Lendo… ${Math.round(p * 100)}%`))
+      }
+      if (looksLikeProof(text)) {
+        const pr = parseProof(text)
+        setDraft({
+          kind: pr.kind, merchant: pr.who ? `Pix ${pr.kind === 'in' ? 'de' : 'para'} ${pr.who}` : 'Pix', cnpj: null,
+          date: pr.date ?? localDate(now), occurredAt: now, totalCents: pr.totalCents ?? 0,
+          category: 'Outros', items: [],
+        })
+        return
+      }
+      const p = parseReceipt(text)
       setDraft({
         kind: 'out',
         merchant: p.merchant,
@@ -58,7 +78,7 @@ export function App() {
         nfceKey: qr?.key ?? p.nfceKey ?? undefined,
       })
     } catch (e) {
-      setError('Não consegui ler a imagem. Tente de novo ou use o botão vermelho para lançar o valor.')
+      setError('Não consegui ler o arquivo. Tente de novo ou use os botões verde e vermelho para lançar o valor.')
       console.error(e)
     } finally {
       setBusy(null)
@@ -91,17 +111,24 @@ export function App() {
         <h1>KaRo</h1>
       </header>
 
+      <input ref={camRef} type="file" accept="image/*" capture="environment" hidden
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f) }} />
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f) }} />
+      <div className="shoot">
+        <button className="cam" disabled={!!busy} onClick={() => camRef.current?.click()} aria-label="Fotografar cupom">
+          <span aria-hidden>📷</span>{busy ?? 'Fotografar cupom'}
+        </button>
+        <button className="clip" disabled={!!busy} onClick={() => fileRef.current?.click()} aria-label="Anexar print ou PDF">
+          <span aria-hidden>📎</span>
+        </button>
+      </div>
+      {error && <p className="error">{error}</p>}
+
       <div className="duo">
         <button className="big in" disabled={!!busy} onClick={() => setQuick('in')}>＋ Entrou</button>
         <button className="big out" disabled={!!busy} onClick={() => setQuick('out')}>− Gastei</button>
       </div>
-
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden
-        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onPhoto(f) }} />
-      <button className="wide" disabled={!!busy} onClick={() => fileRef.current?.click()}>
-        {busy ?? '📷 Ler cupom fiscal'}
-      </button>
-      {error && <p className="error">{error}</p>}
 
       <section className="card total">
         <small>Em {new Date().toLocaleDateString('pt-BR', { month: 'long' })}</small>

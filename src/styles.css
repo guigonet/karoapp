@@ -65,3 +65,11 @@ main.in button.tag.on { background: var(--green); border-color: var(--green); co
 main.out button.tag.on { background: var(--red); border-color: var(--red); color: #450a0a; }
 label.check { display: flex; align-items: center; gap: 10px; }
 label.check input { min-height: 0; width: 22px; height: 22px; accent-color: var(--gold); }
+
+/* tela principal: foto grande + clipe, e embaixo verde/vermelho */
+.shoot { display: grid; grid-template-columns: 1fr 88px; gap: 12px; margin: 16px 0 12px; }
+button.cam { min-height: 120px; display: grid; place-items: center; align-content: center; gap: 6px; font-size: 18px; background: var(--gold); border-color: var(--gold); color: var(--gold-dark); }
+button.cam span { font-size: 48px; line-height: 1; }
+button.clip { min-height: 120px; font-size: 36px; }
+.duo { margin-top: 0; }
+button.big { min-height: 64px; font-size: 20px; }
