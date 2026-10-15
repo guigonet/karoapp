@@ -6,7 +6,8 @@ import { scanQr } from './lib/qr'
 import { formatBRL, parseReceipt, toCents } from './lib/parser'
 import { looksLikeProof, parseProof } from './lib/proof'
 import { DEFAULT_IN, DEFAULT_OUT, TRANSFER, type Category, type Kind } from './lib/categorize'
-import { chooseDialog, confirmDialog } from './Dialog'
+import { chooseDialog, confirmDialog, infoDialog } from './Dialog'
+import { backupFileName, buildBackup, newOnes, parseBackup } from './lib/backup'
 import { doubts } from './lib/doubt'
 import { AIError, aiConsent, debugActive, docToDraft, readWithAI, setAiConsent } from './lib/ai'
 
@@ -67,6 +68,57 @@ export function App() {
     // roda uma vez ao abrir o app
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const importRef = useRef<HTMLInputElement>(null)
+
+  /** Salva um arquivo .json com tudo: pelo menu Compartilhar do celular (WhatsApp, Drive, e-mail) ou baixando. */
+  async function exportBackup() {
+    const file = new File(
+      [JSON.stringify(buildBackup(await db.receipts.toArray(), await db.rules.toArray()), null, 2)],
+      backupFileName(),
+      { type: 'application/json' },
+    )
+    try {
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Backup do KaRo' })
+        return
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return // a pessoa fechou o menu de compartilhar
+    }
+    const url = URL.createObjectURL(file)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = file.name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+
+  async function importBackup(file: File) {
+    try {
+      const { receipts: incoming, rules, skipped } = parseBackup(await file.text())
+      const fresh = newOnes(await db.receipts.toArray(), incoming)
+      if (fresh.length === 0) {
+        await infoDialog('Nada para importar', `Os ${incoming.length} lançamentos deste arquivo já estão neste aparelho.`)
+        return
+      }
+      const dup = incoming.length - fresh.length
+      const ok = await confirmDialog({
+        title: `Importar ${fresh.length} ${fresh.length === 1 ? 'lançamento' : 'lançamentos'}?`,
+        body:
+          `${dup ? `${dup} já existem aqui e não serão repetidos.\n` : ''}` +
+          `${skipped ? `${skipped} do arquivo estavam com defeito e foram ignorados.\n` : ''}` +
+          'Os lançamentos que você já tem continuam como estão.',
+        confirmLabel: 'Importar',
+      })
+      if (!ok) return
+      await db.receipts.bulkAdd(fresh.map(({ id: _id, ...r }) => r))
+      for (const rule of rules) if (!(await db.rules.get(rule.key))) await db.rules.put(rule)
+      await infoDialog('Backup importado', `${fresh.length} ${fresh.length === 1 ? 'lançamento adicionado' : 'lançamentos adicionados'}.`)
+    } catch (e) {
+      await infoDialog('Não consegui importar', e instanceof Error ? e.message : 'O arquivo não pôde ser lido.')
+    }
+  }
 
   async function attach() {
     const where = await chooseDialog({
@@ -278,6 +330,17 @@ export function App() {
           </li>
         ))}
       </ul>
+
+      <input ref={importRef} type="file" accept="application/json,.json" hidden
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importBackup(f) }} />
+      <h2>Seus dados</h2>
+      <p className="muted small">
+        Os lançamentos ficam só neste aparelho. Se você limpar os dados do navegador ou desinstalar o app, eles somem. Guarde um backup de vez em quando.
+      </p>
+      <div className="actions">
+        <button onClick={() => void exportBackup()} disabled={receipts.length === 0}>⬇️ Exportar backup</button>
+        <button onClick={() => importRef.current?.click()}>⬆️ Importar backup</button>
+      </div>
     </main>
   )
 }

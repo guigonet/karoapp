@@ -25,6 +25,10 @@ export const confirmDialog = (o: Opts) =>
     push({ ...o, resolve: (v) => res(v === true) })
   })
 
+/** Aviso com um só botão. */
+export const infoDialog = (title: string, body?: string) =>
+  confirmDialog({ title, body, confirmLabel: 'OK', cancelLabel: '' }).then(() => undefined)
+
 /** Devolve o texto digitado, ou null se a pessoa cancelou. */
 export const promptDialog = (o: InputOpts) =>
   new Promise<string | null>((res) => {
@@ -81,7 +85,7 @@ function Modal({ req, onClose }: { req: Req; onClose: (v: boolean | string | nul
         )}
         <div className="actions">
           {!choices && <button type="submit" className="primary">{req.confirmLabel ?? 'OK'}</button>}
-          <button type="button" onClick={() => onClose(cancelValue)}>{req.cancelLabel ?? 'Cancelar'}</button>
+          {req.cancelLabel !== '' && <button type="button" onClick={() => onClose(cancelValue)}>{req.cancelLabel ?? 'Cancelar'}</button>}
         </div>
       </form>
     </dialog>

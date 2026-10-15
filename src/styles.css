@@ -125,3 +125,5 @@ dialog.dlg .choices button small { color: var(--muted); font-weight: 400; }
 /* balão de teste no topo: no rodapé ele cobria o botão Salvar */
 button.balloon { top: calc(8px + env(safe-area-inset-top)); bottom: auto; }
 body.debug main { padding-bottom: calc(32px + env(safe-area-inset-bottom)); padding-top: 40px; }
+
+p.small { font-size: 14px; margin: 0 0 8px; }
