@@ -6,6 +6,7 @@ import { scanQr } from './lib/qr'
 import { formatBRL, parseReceipt, toCents } from './lib/parser'
 import { looksLikeProof, parseProof } from './lib/proof'
 import { DEFAULT_IN, DEFAULT_OUT, TRANSFER, type Category, type Kind } from './lib/categorize'
+import { confirmDialog } from './Dialog'
 import { doubts } from './lib/doubt'
 import { aiConsent, docToDraft, readWithAI, setAiConsent } from './lib/ai'
 
@@ -102,10 +103,15 @@ export function App() {
   async function askAI() {
     if (!source) return
     if (!aiConsent()) {
-      const ok = confirm(
-        'Ler com IA envia a foto deste documento para a Anthropic (a empresa do Claude) para ser lida.\n\n' +
-        'A imagem pode ter nomes e CPF parcial. O KaRo não guarda a foto, e só salva loja, CNPJ da empresa, valores e itens.\n\nContinuar?',
-      )
+      const ok = await confirmDialog({
+        title: 'Enviar a foto para a IA?',
+        body:
+          'Para ler com IA, a foto deste documento é enviada para a Anthropic, a empresa do Claude.\n\n' +
+          'A imagem pode ter nomes e CPF parcial. O KaRo não guarda a foto e só salva loja, CNPJ da empresa, valores e itens.',
+        confirmLabel: 'Enviar e ler',
+        cancelLabel: 'Agora não',
+        tone: 'danger',
+      })
       if (!ok) return
       setAiConsent()
     }
@@ -135,7 +141,7 @@ export function App() {
   async function save(d: Draft) {
     if (d.nfceKey && !d.id) {
       const dup = await db.receipts.where('nfceKey').equals(d.nfceKey).first()
-      if (dup && !confirm('Essa nota já foi salva. Salvar de novo?')) return
+      if (dup && !(await confirmDialog({ title: 'Nota repetida', body: 'Essa nota fiscal já foi salva. Salvar de novo?', confirmLabel: 'Salvar de novo', cancelLabel: 'Não salvar' }))) return
     }
     await db.receipts.put({ ...d, createdAt: Date.now() })
     if (d.kind === 'out') await learnRule(d.cnpj, d.merchant, d.category)
@@ -342,7 +348,12 @@ function Review({ draft, receipts, warn, busy, error, onAI, onSave, onCancel }: 
       <div className="actions">
         <button className="primary" disabled={!valid} onClick={() => onSave({ ...d, merchant: d.merchant.trim(), totalCents: cents })}>Salvar</button>
         <button onClick={onCancel}>Cancelar</button>
-        {d.id && <button className="danger" onClick={async () => { if (confirm('Excluir este lançamento?')) { await db.receipts.delete(d.id!); onCancel() } }}>Excluir</button>}
+        {d.id && <button className="danger" onClick={async () => {
+          if (await confirmDialog({ title: 'Excluir este lançamento?', body: 'Isso não pode ser desfeito.', confirmLabel: 'Excluir', cancelLabel: 'Manter', tone: 'danger' })) {
+            await db.receipts.delete(d.id!)
+            onCancel()
+          }
+        }}>Excluir</button>}
       </div>
     </main>
   )

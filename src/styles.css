@@ -95,3 +95,17 @@ button.balloon {
 /* modo de teste: o balão não pode esconder o fim da tela */
 body.debug main { padding-bottom: 96px; }
 button.balloon { white-space: nowrap; font-size: 12px; padding: 0 12px; }
+
+/* caixas de diálogo do app (no lugar do confirm/prompt do navegador) */
+dialog.dlg {
+  width: min(92vw, 420px); padding: 20px; border: 2px solid var(--card); border-radius: 16px;
+  background: #26235e; color: var(--text); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+dialog.dlg::backdrop { background: rgba(8, 7, 30, 0.72); }
+dialog.dlg h2 { margin: 0 0 8px; font-size: 20px; color: var(--gold); }
+dialog.dlg .dlg-body { margin: 0 0 14px; color: var(--muted); white-space: pre-line; }
+dialog.dlg input { width: 100%; margin-bottom: 4px; }
+dialog.dlg .actions { margin: 16px 0 0; }
+dialog.dlg.danger { border-color: var(--red); }
+dialog.dlg.danger h2 { color: var(--red); }
+dialog.dlg.danger button.primary { background: var(--red); border-color: var(--red); color: #450a0a; }
