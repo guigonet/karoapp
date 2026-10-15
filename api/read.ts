@@ -27,6 +27,8 @@ Regras:
 - total e valores em reais, como número (ex.: 39.95). total é o valor total pago.
 - items: um por produto do cupom, com a quantidade e os preços impressos. Lista vazia se não for cupom ou se não der para ler.
 - category de cada item e do documento: use uma da lista. Cigarro e bebida alcoólica são "Bebida e cigarro" mesmo comprados num mercado. Se a loja é um mercado e o item é comida ou limpeza, use "Mercado".
+- category é sempre uma da lista; se não souber, "Outros".
+- direction: "none" se o documento não é comprovante de Pix.
 - Comprovante de Pix: direction é "out" se quem enviou é o dono do comprovante, "in" se ele recebeu, "own_transfer" se origem e destino são a mesma pessoa. counterparty é o nome da outra pessoa (nunca CPF).
 - confidence: "high" se leu tudo com clareza, "medium" se houve dúvida em algum campo, "low" se a imagem está ruim.`
 
@@ -39,7 +41,7 @@ const ITEM = {
     qty: { type: 'number' },
     unit_price: { type: 'number' },
     total_price: { type: 'number' },
-    category: { type: ['string', 'null'], enum: [...CATEGORIES, null] },
+    category: { type: 'string', enum: CATEGORIES },
   },
 }
 
@@ -54,9 +56,9 @@ const SCHEMA = {
     date: { type: ['string', 'null'] },
     time: { type: ['string', 'null'] },
     total: { type: ['number', 'null'] },
-    category: { type: ['string', 'null'], enum: [...CATEGORIES, null] },
+    category: { type: 'string', enum: CATEGORIES },
     items: { type: 'array', items: ITEM },
-    direction: { type: ['string', 'null'], enum: ['out', 'in', 'own_transfer', null] },
+    direction: { type: 'string', enum: ['out', 'in', 'own_transfer', 'none'] },
     counterparty: { type: ['string', 'null'] },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
   },

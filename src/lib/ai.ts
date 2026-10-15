@@ -12,7 +12,7 @@ export interface AIDoc {
   total: number | null
   category: string | null
   items: { description: string; qty: number; unit_price: number; total_price: number; category: string | null }[]
-  direction: 'out' | 'in' | 'own_transfer' | null
+  direction: 'out' | 'in' | 'own_transfer' | 'none' | null
   counterparty: string | null
   confidence: 'high' | 'medium' | 'low'
 }

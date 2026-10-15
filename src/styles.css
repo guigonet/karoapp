@@ -91,3 +91,7 @@ button.balloon {
   background: #dc2626; color: #fff; font: 600 13px ui-monospace, 'Courier New', monospace;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
+
+/* modo de teste: o balão não pode esconder o fim da tela */
+body.debug main { padding-bottom: 96px; }
+button.balloon { white-space: nowrap; font-size: 12px; padding: 0 12px; }
