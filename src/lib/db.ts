@@ -22,8 +22,16 @@ export interface Receipt {
   createdAt: number
 }
 
+/** O que o app aprendeu: esta loja (CNPJ, ou nome se não houver) é desta categoria. */
+export interface Rule {
+  key: string
+  category: Category
+  updatedAt: number
+}
+
 class KaroDB extends Dexie {
   receipts!: Table<Receipt, number>
+  rules!: Table<Rule, string>
   constructor() {
     super('karo')
     this.version(1).stores({ receipts: '++id, date, category, nfceKey' })
@@ -34,10 +42,34 @@ class KaroDB extends Dexie {
           r.kind ??= 'out'
           r.occurredAt ??= r.createdAt ?? Date.now()
         }))
+    this.version(3).stores({ receipts: '++id, date, category, nfceKey, occurredAt, kind', rules: 'key' })
   }
 }
 
 export const db = new KaroDB()
+
+export const ruleKey = (cnpj: string | null, merchant: string) => {
+  const digits = cnpj?.replace(/\D/g, '')
+  if (digits && digits.length === 14) return `cnpj:${digits}`
+  const name = merchant.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+  return name.length >= 4 ? `nome:${name}` : null
+}
+
+/** Categoria que a pessoa já escolheu para esta loja, se houver. */
+export async function findRule(cnpj: string | null, merchant: string): Promise<Category | null> {
+  for (const k of [ruleKey(cnpj, ''), ruleKey(null, merchant)]) {
+    const r = k ? await db.rules.get(k) : undefined
+    if (r) return r.category
+  }
+  return null
+}
+
+/** Guarda a escolha da pessoa. "Outros" não é escolha, é a falta dela, então não ensina nada. */
+export async function learnRule(cnpj: string | null, merchant: string, category: Category) {
+  if (category === 'Outros' || category === 'Transferência própria') return
+  for (const k of [ruleKey(cnpj, ''), ruleKey(null, merchant)])
+    if (k) await db.rules.put({ key: k, category, updatedAt: Date.now() })
+}
 
 export const localDate = (ms: number) => {
   const d = new Date(ms)

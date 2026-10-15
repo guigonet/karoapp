@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, getLocation, localDate, type Receipt } from './lib/db'
+import { db, findRule, getLocation, learnRule, localDate, type Receipt } from './lib/db'
 import { readText } from './lib/ocr'
 import { scanQr } from './lib/qr'
 import { formatBRL, parseReceipt, toCents } from './lib/parser'
@@ -56,18 +56,21 @@ export function App() {
         setBusy('Lendo… 0%')
         text = await readText(file, (p) => setBusy(`Lendo… ${Math.round(p * 100)}%`))
       }
-      if (looksLikeProof(text)) {
-        const pr = parseProof(text)
+      const pr = looksLikeProof(text) ? parseProof(text) : null
+      if (pr?.totalCents) {
         const at = pr.occurredAt ?? now
         setDraft({
           kind: pr.kind,
           merchant: pr.ownTransfer ? 'Transferência entre minhas contas' : pr.who ? `Pix ${pr.kind === 'in' ? 'de' : 'para'} ${pr.who}` : 'Pix',
-          cnpj: null, date: pr.date ?? localDate(at), occurredAt: at, totalCents: pr.totalCents ?? 0,
+          cnpj: null, date: pr.date ?? localDate(at), occurredAt: at, totalCents: pr.totalCents,
           category: pr.ownTransfer ? TRANSFER : 'Outros', items: [],
         })
         return
       }
       const p = parseReceipt(text)
+      // o app aprende: se esta loja já foi categorizada antes, usa a categoria que a pessoa escolheu
+      const learned = await findRule(p.cnpj ?? qr?.cnpj ?? null, p.merchant)
+      if (learned) p.category = learned
       setDraft({
         kind: 'out',
         merchant: p.merchant,
@@ -93,6 +96,7 @@ export function App() {
       if (dup && !confirm('Essa nota já foi salva. Salvar de novo?')) return
     }
     await db.receipts.put({ ...d, createdAt: Date.now() })
+    if (d.kind === 'out') await learnRule(d.cnpj, d.merchant, d.category)
     setDraft(null)
   }
 

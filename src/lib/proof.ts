@@ -14,9 +14,12 @@ export interface ParsedProof {
   ownTransfer: boolean
 }
 
+// A palavra "Pix" sozinha não basta: todo cupom pago no Pix a tem em "FORMA DE PAGAMENTO".
+const PROOF_MARKERS = /comprovante\s+de\s+(transfer|pagamento|pix)|pix\s+(enviado|recebido)|voc[eê]\s+(enviou|recebeu|pagou|transferiu)|transfer[eê]ncia\s+(enviada|recebida|realizada)|dados\s+de\s+quem\s+(recebeu|pagou)/i
+const RECEIPT_MARKERS = /NFC-?e|CUPOM\s+FISCAL|DANFE|NOTA\s+FISCAL|DOCUMENTO\s+AUXILIAR|CONSUMIDOR|CHAVE\s+DE\s+ACESSO/i
+
 /** Texto parece comprovante/print de transferência, e não cupom fiscal? */
-export const looksLikeProof = (text: string) =>
-  /\bpix\b|comprovante de (transfer|pagamento)|transfer[eê]ncia/i.test(text) && !/NFC-?e|CUPOM FISCAL|DANFE/i.test(text)
+export const looksLikeProof = (text: string) => PROOF_MARKERS.test(text) && !RECEIPT_MARKERS.test(text)
 
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const TIME = '(?:\\s*[-–]?\\s*(\\d{2}):(\\d{2})(?::(\\d{2}))?)?'

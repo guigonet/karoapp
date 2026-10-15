@@ -61,4 +61,9 @@ describe('parseProof', () => {
   })
 
   it('cupom fiscal não é comprovante', () => expect(looksLikeProof('NFC-e CUPOM FISCAL\nFORMA DE PAGAMENTO PIX')).toBe(false))
+
+  it('cupom pago no Pix, mesmo sem "NFC-e" legível (caso real do celular)', () => {
+    const topo = 'E DE CASA SUPERMERCADOS LTDA\nCNPJ: 33.030.242/0006-91\nFORMA DE PAGAMENTO\nPIX 39,95\nVALOR TOTAL R$ 39,95'
+    expect(looksLikeProof(topo)).toBe(false)
+  })
 })
