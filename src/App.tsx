@@ -5,7 +5,7 @@ import { readText } from './lib/ocr'
 import { scanQr } from './lib/qr'
 import { formatBRL, parseReceipt, toCents } from './lib/parser'
 import { looksLikeProof, parseProof } from './lib/proof'
-import { DEFAULT_IN, DEFAULT_OUT, type Category, type Kind } from './lib/categorize'
+import { DEFAULT_IN, DEFAULT_OUT, TRANSFER, type Category, type Kind } from './lib/categorize'
 
 type Draft = Omit<Receipt, 'id' | 'createdAt'> & { id?: number }
 
@@ -58,10 +58,12 @@ export function App() {
       }
       if (looksLikeProof(text)) {
         const pr = parseProof(text)
+        const at = pr.occurredAt ?? now
         setDraft({
-          kind: pr.kind, merchant: pr.who ? `Pix ${pr.kind === 'in' ? 'de' : 'para'} ${pr.who}` : 'Pix', cnpj: null,
-          date: pr.date ?? localDate(now), occurredAt: now, totalCents: pr.totalCents ?? 0,
-          category: 'Outros', items: [],
+          kind: pr.kind,
+          merchant: pr.ownTransfer ? 'Transferência entre minhas contas' : pr.who ? `Pix ${pr.kind === 'in' ? 'de' : 'para'} ${pr.who}` : 'Pix',
+          cnpj: null, date: pr.date ?? localDate(at), occurredAt: at, totalCents: pr.totalCents ?? 0,
+          category: pr.ownTransfer ? TRANSFER : 'Outros', items: [],
         })
         return
       }
@@ -98,7 +100,8 @@ export function App() {
   if (draft) return <Review draft={draft} receipts={receipts} onCancel={() => setDraft(null)} onSave={save} />
 
   const month = monthOf(localDate(Date.now()))
-  const thisMonth = receipts.filter((r) => monthOf(r.date) === month)
+  // transferência entre contas da própria pessoa não é ganho nem gasto
+  const thisMonth = receipts.filter((r) => monthOf(r.date) === month && r.category !== TRANSFER)
   const income = thisMonth.filter((r) => r.kind === 'in').reduce((s, r) => s + r.totalCents, 0)
   const outList = thisMonth.filter((r) => r.kind === 'out')
   const spent = outList.reduce((s, r) => s + r.totalCents, 0)
@@ -235,6 +238,11 @@ function Review({ draft, receipts, onSave, onCancel }: { draft: Draft; receipts:
     <main>
       <h1>Conferir</h1>
       <p className="muted">Confira o que o leitor entendeu e corrija o que precisar.</p>
+      {d.category === TRANSFER && <p className="notice">Parece uma transferência entre contas suas. Ela fica na lista, mas não entra no saldo do mês.</p>}
+      <div className="duo kind">
+        <button className={`big in ${d.kind === 'in' ? '' : 'off'}`} onClick={() => set('kind', 'in')}>＋ Entrou</button>
+        <button className={`big out ${d.kind === 'out' ? '' : 'off'}`} onClick={() => set('kind', 'out')}>− Gastei</button>
+      </div>
       <label>{d.kind === 'in' ? 'Descrição' : 'Loja'}<input value={d.merchant} onChange={(e) => set('merchant', e.target.value)} /></label>
       <label>Data<input type="date" value={d.date} onChange={(e) => set('date', e.target.value)} /></label>
       <label>Total (R$)<input inputMode="decimal" value={total} onChange={(e) => setTotal(e.target.value)} /></label>

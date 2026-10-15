@@ -1,6 +1,9 @@
 export type Category = string
 export type Kind = 'in' | 'out'
 
+/** Dinheiro que só mudou de conta (mesma pessoa): não entra nas somas de ganho e gasto. */
+export const TRANSFER: Category = 'Transferência própria'
+
 export const DEFAULT_OUT: Category[] = [
   'Mercado', 'Bebida e cigarro', 'Combustível', 'Restaurante', 'Farmácia', 'Transporte', 'Casa',
   'Dízimo e ofertas', 'Lazer', 'Outros',
