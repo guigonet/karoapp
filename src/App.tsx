@@ -6,6 +6,8 @@ import { scanQr } from './lib/qr'
 import { formatBRL, parseReceipt, toCents } from './lib/parser'
 import { looksLikeProof, parseProof } from './lib/proof'
 import { DEFAULT_IN, DEFAULT_OUT, TRANSFER, type Category, type Kind } from './lib/categorize'
+import { doubts } from './lib/doubt'
+import { aiConsent, docToDraft, readWithAI, setAiConsent } from './lib/ai'
 
 type Draft = Omit<Receipt, 'id' | 'createdAt'> & { id?: number }
 
@@ -36,6 +38,9 @@ export function App() {
   const [quick, setQuick] = useState<Kind | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [source, setSource] = useState<File | null>(null)
+  const [warn, setWarn] = useState<string[]>([])
+  const [version, setVersion] = useState(0)
   const camRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -56,9 +61,11 @@ export function App() {
         setBusy('Lendo… 0%')
         text = await readText(file, (p) => setBusy(`Lendo… ${Math.round(p * 100)}%`))
       }
+      setSource(input)
       const pr = looksLikeProof(text) ? parseProof(text) : null
       if (pr?.totalCents) {
         const at = pr.occurredAt ?? now
+        setWarn(pr.who ? [] : ['Não encontrei o nome da outra pessoa.'])
         setDraft({
           kind: pr.kind,
           merchant: pr.ownTransfer ? 'Transferência entre minhas contas' : pr.who ? `Pix ${pr.kind === 'in' ? 'de' : 'para'} ${pr.who}` : 'Pix',
@@ -71,6 +78,7 @@ export function App() {
       // o app aprende: se esta loja já foi categorizada antes, usa a categoria que a pessoa escolheu
       const learned = await findRule(p.cnpj ?? qr?.cnpj ?? null, p.merchant)
       if (learned) p.category = learned
+      setWarn(doubts({ merchant: p.merchant, cnpj: p.cnpj ?? qr?.cnpj ?? null, date: p.date, totalCents: p.totalCents, items: p.items }))
       setDraft({
         kind: 'out',
         merchant: p.merchant,
@@ -90,6 +98,40 @@ export function App() {
     }
   }
 
+  /** Segunda opinião: manda a foto para o Claude (via /api/read) e troca a leitura da tela de conferência. */
+  async function askAI() {
+    if (!source) return
+    if (!aiConsent()) {
+      const ok = confirm(
+        'Ler com IA envia a foto deste documento para a Anthropic (a empresa do Claude) para ser lida.\n\n' +
+        'A imagem pode ter nomes e CPF parcial. O KaRo não guarda a foto, e só salva loja, CNPJ da empresa, valores e itens.\n\nContinuar?',
+      )
+      if (!ok) return
+      setAiConsent()
+    }
+    setError(null)
+    setBusy('Lendo com IA…')
+    try {
+      const img = source.type === 'application/pdf' ? await (await import('./lib/pdf')).pdfToImage(source) : source
+      const doc = await readWithAI(img)
+      const d: Draft = { ...docToDraft(doc), nfceKey: draft?.nfceKey }
+      if (d.kind === 'out' && d.category !== TRANSFER) d.category = (await findRule(d.cnpj, d.merchant)) ?? d.category
+      setWarn(
+        doc.confidence === 'low' ? ['A IA também não teve certeza. Confira com atenção.']
+          : doc.document_type !== 'cupom_fiscal' ? []
+          : doubts({ merchant: d.merchant, cnpj: d.cnpj, date: d.date, totalCents: d.totalCents, items: d.items }),
+      )
+      setDraft(d)
+      setVersion((v) => v + 1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não consegui ler com a IA.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const closeDraft = () => { setDraft(null); setSource(null); setWarn([]); setError(null) }
+
   async function save(d: Draft) {
     if (d.nfceKey && !d.id) {
       const dup = await db.receipts.where('nfceKey').equals(d.nfceKey).first()
@@ -97,11 +139,15 @@ export function App() {
     }
     await db.receipts.put({ ...d, createdAt: Date.now() })
     if (d.kind === 'out') await learnRule(d.cnpj, d.merchant, d.category)
-    setDraft(null)
+    closeDraft()
   }
 
   if (quick) return <QuickEntry kind={quick} receipts={receipts} onDone={() => setQuick(null)} />
-  if (draft) return <Review draft={draft} receipts={receipts} onCancel={() => setDraft(null)} onSave={save} />
+  if (draft)
+    return (
+      <Review key={version} draft={draft} receipts={receipts} warn={warn} busy={busy} error={error}
+        onAI={source ? askAI : undefined} onCancel={closeDraft} onSave={save} />
+    )
 
   const month = monthOf(localDate(Date.now()))
   // transferência entre contas da própria pessoa não é ganho nem gasto
@@ -229,7 +275,19 @@ function QuickEntry({ kind, receipts, onDone }: { kind: Kind; receipts: Receipt[
   )
 }
 
-function Review({ draft, receipts, onSave, onCancel }: { draft: Draft; receipts: Receipt[]; onSave: (d: Draft) => void; onCancel: () => void }) {
+interface ReviewProps {
+  draft: Draft
+  receipts: Receipt[]
+  warn: string[]
+  busy: string | null
+  error: string | null
+  /** só existe quando há uma foto/arquivo de origem para reler */
+  onAI?: () => void
+  onSave: (d: Draft) => void
+  onCancel: () => void
+}
+
+function Review({ draft, receipts, warn, busy, error, onAI, onSave, onCancel }: ReviewProps) {
   const [d, setD] = useState(draft)
   const [total, setTotal] = useState((d.totalCents / 100).toFixed(2).replace('.', ','))
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }))
@@ -242,6 +300,18 @@ function Review({ draft, receipts, onSave, onCancel }: { draft: Draft; receipts:
     <main>
       <h1>Conferir</h1>
       <p className="muted">Confira o que o leitor entendeu e corrija o que precisar.</p>
+      {warn.length > 0 && (
+        <div className="warn" role="alert">
+          <b>Leitura duvidosa</b>
+          <ul>{warn.map((w) => <li key={w}>{w}</li>)}</ul>
+        </div>
+      )}
+      {onAI && (
+        <button className={`ai ${warn.length ? 'hot' : ''}`} disabled={!!busy} onClick={onAI}>
+          {busy ?? '✨ Ler com IA'}
+        </button>
+      )}
+      {error && <p className="error">{error}</p>}
       {d.category === TRANSFER && <p className="notice">Parece uma transferência entre contas suas. Ela fica na lista, mas não entra no saldo do mês.</p>}
       <div className="duo kind">
         <button className={`big in ${d.kind === 'in' ? '' : 'off'}`} onClick={() => set('kind', 'in')}>＋ Entrou</button>

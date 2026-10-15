@@ -37,3 +37,20 @@ npm run icons    # regenera a moeda 8-bit (public/icon*.png)
 ## Deploy
 
 Vercel: importar o repositório. Framework Vite, build `npm run build`, saída `dist`.
+
+## Ler com IA (opcional)
+
+Botão "✨ Ler com IA" na tela de conferência: manda a foto para o Claude (Haiku 5.5) por uma função da Vercel
+([api/read.ts](api/read.ts)). A chave da Anthropic fica só na Vercel, nunca no app.
+
+Variáveis em Vercel → Settings → Environment Variables (depois, redeploy):
+
+| Variável | O que é |
+|---|---|
+| `ANTHROPIC_API_KEY` | chave criada em console.anthropic.com |
+| `KARO_TEST_TOKEN` | senha de teste; sem ela a função recusa o pedido (protege o seu crédito) |
+
+Modo de teste: abra o app com `?debug=1` para ver o balão vermelho de gasto. Toque nele para informar a senha de teste.
+`?debug=0` desliga.
+
+O app só guarda loja, CNPJ da empresa, valores e itens. CPF nunca é salvo.
