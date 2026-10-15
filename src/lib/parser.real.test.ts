@@ -76,3 +76,12 @@ describe('cleanMerchant', () => {
     expect(cleanMerchant('Padaria Pão Quente')).toBe('Padaria Pão Quente')
   })
 })
+
+describe('categoria de itens', () => {
+  it('só marca item com cara de produto (café em pó num mercado continua Mercado)', () => {
+    const r = parseReceipt('SUPERMERCADO BOM PRECO LTDA\n001 7891000100103 CAFE EM PO 500G 1 UN x 18,90 18,90\n002 7891000100104 CERVEJA SKOL LATA 2 UN x 4,00 8,00\nVALOR TOTAL R$ 26,90')
+    expect(r.category).toBe('Mercado')
+    expect(r.items[0].category).toBeUndefined()
+    expect(r.items[1].category).toBe('Bebida e cigarro')
+  })
+})

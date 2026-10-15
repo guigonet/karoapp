@@ -1,4 +1,4 @@
-import { matchCategory, type Category } from './categorize'
+import { matchCategory, matchItemCategory, type Category } from './categorize'
 
 export interface ReceiptItem {
   /** categoria própria do item, se as regras reconhecerem (ex.: cigarro) */
@@ -95,7 +95,7 @@ function parseItem(line: string): ReceiptItem | null {
     .replace(/\s+/g, ' ')
     .trim()
   if (description.length < 3 || !/[A-Za-zÀ-ÿ]{3}/.test(description)) return null
-  return { description, qty, unitCents, totalCents, category: matchCategory(description) ?? undefined }
+  return { description, qty, unitCents, totalCents, category: matchItemCategory(description) ?? undefined }
 }
 
 const HEADER = /\b(QTDE?|UNIT|TOTAL|DESCRI[CÇ][AÃ]O|C[OÓ]DIGO|UNID|VALOR|DOCUMENTO|CONSUMIDOR|NOTA FISCAL|CUPOM)\b/i

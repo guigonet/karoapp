@@ -27,11 +27,19 @@ const RULES: Record<string, string[]> = {
 
 const strip = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
 
-/** Categoria pelas regras, ou null se nenhuma bate. */
-export function matchCategory(text: string): Category | null {
+function match(text: string, cats: string[]): Category | null {
   const t = strip(text)
-  for (const [cat, words] of Object.entries(RULES)) if (words.some((w) => strip(w).trim() && t.includes(strip(w)))) return cat
+  for (const cat of cats) if (RULES[cat].some((w) => t.includes(strip(w)))) return cat
   return null
 }
+
+/** Categoria de uma LOJA pelo nome, ou null se nenhuma regra bate. */
+export const matchCategory = (text: string) => match(text, Object.keys(RULES))
+
+/**
+ * Categoria de um PRODUTO. Só as categorias que têm "cara de produto": o resto do dicionário
+ * serve para nome de loja (ex.: "CAFE" é restaurante, mas "CAFE EM PO" num mercado é mercado).
+ */
+export const matchItemCategory = (text: string) => match(text, ['Bebida e cigarro', 'Combustível'])
 
 export const categorize = (text: string): Category => matchCategory(text) ?? 'Outros'
