@@ -1,0 +1,48 @@
+:root {
+  --bg: #1e1b4b;
+  --card: #2e2a6b;
+  --text: #f5f3ff;
+  --muted: #a5a3d4;
+  --gold: #fcd34d;
+  --gold-dark: #78350f;
+  --danger: #f87171;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+main { max-width: 480px; margin: 0 auto; padding: 16px 16px calc(32px + env(safe-area-inset-bottom)); }
+header { display: flex; align-items: center; gap: 12px; }
+header img { image-rendering: pixelated; }
+h1 { font: 700 26px ui-monospace, 'Courier New', monospace; letter-spacing: 2px; color: var(--gold); margin: 8px 0; }
+h2 { font-size: 16px; color: var(--muted); margin: 24px 0 8px; }
+.muted { color: var(--muted); }
+.card { background: var(--card); border-radius: 12px; padding: 16px; }
+.total { display: grid; gap: 4px; }
+.total small { color: var(--muted); text-transform: capitalize; }
+.total strong { font-size: 32px; }
+.cats { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.cats li { display: flex; justify-content: space-between; color: var(--muted); }
+.actions { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+button {
+  min-height: 48px; padding: 0 16px; border-radius: 10px; border: 2px solid var(--card);
+  background: var(--card); color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
+}
+button.primary { background: var(--gold); border-color: var(--gold); color: var(--gold-dark); flex: 1; }
+button.danger { color: var(--danger); background: transparent; border-color: var(--danger); }
+button:disabled { opacity: 0.5; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.error { color: var(--danger); }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.list li { display: flex; justify-content: space-between; gap: 12px; align-items: center; background: var(--card); border-radius: 10px; padding: 12px; cursor: pointer; }
+.list.items li { cursor: default; }
+.list small { display: block; color: var(--muted); }
+label { display: grid; gap: 4px; margin: 12px 0; color: var(--muted); font-size: 14px; }
+input, select {
+  min-height: 48px; padding: 0 12px; border-radius: 10px; border: 2px solid var(--card);
+  background: #14123a; color: var(--text); font: inherit; font-size: 16px;
+}
