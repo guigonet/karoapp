@@ -109,3 +109,9 @@ dialog.dlg .actions { margin: 16px 0 0; }
 dialog.dlg.danger { border-color: var(--red); }
 dialog.dlg.danger h2 { color: var(--red); }
 dialog.dlg.danger button.primary { background: var(--red); border-color: var(--red); color: #450a0a; }
+
+/* relatório da leitura (só no modo de teste) */
+pre.dbg {
+  margin: 8px 0 12px; padding: 10px 12px; border-radius: 8px; background: #14123a; color: #fca5a5;
+  border-left: 4px solid #dc2626; font: 12px/1.5 ui-monospace, 'Courier New', monospace; white-space: pre-wrap; word-break: break-word;
+}

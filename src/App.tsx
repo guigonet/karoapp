@@ -8,7 +8,7 @@ import { looksLikeProof, parseProof } from './lib/proof'
 import { DEFAULT_IN, DEFAULT_OUT, TRANSFER, type Category, type Kind } from './lib/categorize'
 import { confirmDialog } from './Dialog'
 import { doubts } from './lib/doubt'
-import { aiConsent, docToDraft, readWithAI, setAiConsent } from './lib/ai'
+import { AIError, aiConsent, debugActive, docToDraft, readWithAI, setAiConsent } from './lib/ai'
 
 type Draft = Omit<Receipt, 'id' | 'createdAt'> & { id?: number }
 
@@ -42,6 +42,7 @@ export function App() {
   const [source, setSource] = useState<File | null>(null)
   const [warn, setWarn] = useState<string[]>([])
   const [version, setVersion] = useState(0)
+  const [log, setLog] = useState<string[]>([])
   const camRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -49,6 +50,7 @@ export function App() {
     setError(null)
     try {
       const now = Date.now()
+      const t0 = performance.now()
       let file: Blob = input
       let text = ''
       if (input.type === 'application/pdf') {
@@ -63,9 +65,11 @@ export function App() {
         text = await readText(file, (p) => setBusy(`Lendo… ${Math.round(p * 100)}%`))
       }
       setSource(input)
+      const ocr = `Leitura local (OCR): ${((performance.now() - t0) / 1000).toFixed(1)} s, ${text.length} caracteres`
       const pr = looksLikeProof(text) ? parseProof(text) : null
       if (pr?.totalCents) {
         const at = pr.occurredAt ?? now
+        setLog([ocr, 'Reconhecido como comprovante de Pix'])
         setWarn(pr.who ? [] : ['Não encontrei o nome da outra pessoa.'])
         setDraft({
           kind: pr.kind,
@@ -79,7 +83,9 @@ export function App() {
       // o app aprende: se esta loja já foi categorizada antes, usa a categoria que a pessoa escolheu
       const learned = await findRule(p.cnpj ?? qr?.cnpj ?? null, p.merchant)
       if (learned) p.category = learned
-      setWarn(doubts({ merchant: p.merchant, cnpj: p.cnpj ?? qr?.cnpj ?? null, date: p.date, totalCents: p.totalCents, items: p.items }))
+      const w = doubts({ merchant: p.merchant, cnpj: p.cnpj ?? qr?.cnpj ?? null, date: p.date, totalCents: p.totalCents, items: p.items })
+      setWarn(w)
+      setLog([ocr, 'Reconhecido como cupom fiscal', `Itens lidos: ${p.items.length} · avisos de leitura: ${w.length}${qr ? ' · QR code lido' : ''}`])
       setDraft({
         kind: 'out',
         merchant: p.merchant,
@@ -116,10 +122,27 @@ export function App() {
       setAiConsent()
     }
     setError(null)
-    setBusy('Lendo com IA…')
+    // a tela mostra o que está acontecendo e há quantos segundos, para não parecer travada
+    let label = 'Preparando…'
+    const started = Date.now()
+    const tick = () => setBusy(`${label} ${Math.round((Date.now() - started) / 1000)} s`)
+    const timer = setInterval(tick, 500)
+    const step = (s: string) => { label = s; tick() }
+    tick()
     try {
+      step('Preparando a foto…')
       const img = source.type === 'application/pdf' ? await (await import('./lib/pdf')).pdfToImage(source) : source
-      const doc = await readWithAI(img)
+      const run = await readWithAI(img, step)
+      const { doc } = run
+      const s = (ms: number) => (ms / 1000).toFixed(1)
+      setLog((l) => [
+        ...l,
+        '— IA —',
+        `Foto enviada: ${run.dims}, ${run.kb} KB (preparada em ${s(run.prepMs)} s)`,
+        `A IA respondeu em ${s(run.waitMs)} s · documento: ${doc.document_type} · confiança: ${doc.confidence}`,
+        `Tokens: ${run.usage.input} de entrada + ${run.usage.output} de saída = US$ ${run.costUsd.toFixed(4)}`,
+        `Leu: ${doc.items.length} ${doc.items.length === 1 ? 'item' : 'itens'}, total ${doc.total ?? '—'}`,
+      ])
       const d: Draft = { ...docToDraft(doc), nfceKey: draft?.nfceKey }
       if (d.kind === 'out' && d.category !== TRANSFER) d.category = (await findRule(d.cnpj, d.merchant)) ?? d.category
       setWarn(
@@ -130,13 +153,16 @@ export function App() {
       setDraft(d)
       setVersion((v) => v + 1)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Não consegui ler com a IA.')
+      const msg = e instanceof Error ? e.message : 'Não consegui ler com a IA.'
+      setError(msg)
+      setLog((l) => [...l, '— IA —', `Falhou: ${msg}`, ...(e instanceof AIError && e.costUsd ? [`Custo mesmo assim: US$ ${e.costUsd.toFixed(4)}`] : [])])
     } finally {
+      clearInterval(timer)
       setBusy(null)
     }
   }
 
-  const closeDraft = () => { setDraft(null); setSource(null); setWarn([]); setError(null) }
+  const closeDraft = () => { setDraft(null); setSource(null); setWarn([]); setError(null); setLog([]) }
 
   async function save(d: Draft) {
     if (d.nfceKey && !d.id) {
@@ -151,7 +177,7 @@ export function App() {
   if (quick) return <QuickEntry kind={quick} receipts={receipts} onDone={() => setQuick(null)} />
   if (draft)
     return (
-      <Review key={version} draft={draft} receipts={receipts} warn={warn} busy={busy} error={error}
+      <Review key={version} draft={draft} receipts={receipts} warn={warn} busy={busy} error={error} log={log}
         onAI={source ? askAI : undefined} onCancel={closeDraft} onSave={save} />
     )
 
@@ -287,13 +313,15 @@ interface ReviewProps {
   warn: string[]
   busy: string | null
   error: string | null
+  /** relatório da leitura, mostrado só no modo de teste */
+  log: string[]
   /** só existe quando há uma foto/arquivo de origem para reler */
   onAI?: () => void
   onSave: (d: Draft) => void
   onCancel: () => void
 }
 
-function Review({ draft, receipts, warn, busy, error, onAI, onSave, onCancel }: ReviewProps) {
+function Review({ draft, receipts, warn, busy, error, log, onAI, onSave, onCancel }: ReviewProps) {
   const [d, setD] = useState(draft)
   const [total, setTotal] = useState((d.totalCents / 100).toFixed(2).replace('.', ','))
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }))
@@ -318,7 +346,8 @@ function Review({ draft, receipts, warn, busy, error, onAI, onSave, onCancel }: 
         </button>
       )}
       {error && <p className="error">{error}</p>}
-      {d.category === TRANSFER && <p className="notice">Parece uma transferência entre contas suas. Ela fica na lista, mas não entra no saldo do mês.</p>}
+      {log.length > 0 && debugActive() && <pre className="dbg" aria-label="Relatório da leitura (modo de teste)">{log.join('\n')}</pre>}
+      {d.category === TRANSFER &&<p className="notice">Parece uma transferência entre contas suas. Ela fica na lista, mas não entra no saldo do mês.</p>}
       <div className="duo kind">
         <button className={`big in ${d.kind === 'in' ? '' : 'off'}`} onClick={() => set('kind', 'in')}>＋ Entrou</button>
         <button className={`big out ${d.kind === 'out' ? '' : 'off'}`} onClick={() => set('kind', 'out')}>− Gastei</button>

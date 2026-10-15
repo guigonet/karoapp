@@ -49,7 +49,7 @@ export function docToDraft(doc: AIDoc, now = Date.now()): DraftData {
 }
 
 // ---- foto -> base64 reduzida (a Vercel aceita até 4,5 MB por pedido, e foto menor custa menos tokens)
-export async function downscale(file: Blob, maxSide = 1600): Promise<{ image: string; mediaType: 'image/jpeg' }> {
+export async function downscale(file: Blob, maxSide = 1600): Promise<{ image: string; mediaType: 'image/jpeg'; width: number; height: number }> {
   const bmp = await createImageBitmap(file)
   const k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height))
   const canvas = document.createElement('canvas')
@@ -60,7 +60,7 @@ export async function downscale(file: Blob, maxSide = 1600): Promise<{ image: st
   const buf = new Uint8Array(await blob.arrayBuffer())
   let bin = ''
   for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000))
-  return { image: btoa(bin), mediaType: 'image/jpeg' }
+  return { image: btoa(bin), mediaType: 'image/jpeg', width: canvas.width, height: canvas.height }
 }
 
 // ---- preferências e contador de gasto (só para o modo de teste)
@@ -86,6 +86,9 @@ export function debugOn() {
   return safe.get('karo.debug') === '1'
 }
 
+/** O modo de teste está ligado neste aparelho? (só lê, não muda nada) */
+export const debugActive = () => safe.get('karo.debug') === '1'
+
 export interface AIStats { usd: number; calls: number; inTok: number; outTok: number }
 export const getStats = (): AIStats => {
   try { return { usd: 0, calls: 0, inTok: 0, outTok: 0, ...JSON.parse(safe.get('karo.aiStats') ?? '{}') } } catch { return { usd: 0, calls: 0, inTok: 0, outTok: 0 } }
@@ -97,20 +100,52 @@ function addStats(usage: { input: number; output: number }, usd: number) {
   window.dispatchEvent(new Event('karo-ai-stats'))
 }
 
-export class AIError extends Error {}
+/** Resultado de uma leitura, com os números que o modo de teste mostra. */
+export interface AIRun {
+  doc: AIDoc
+  usage: { input: number; output: number }
+  costUsd: number
+  /** foto enviada */
+  dims: string
+  kb: number
+  prepMs: number
+  /** tempo de espera pela IA */
+  waitMs: number
+}
 
-/** Envia a imagem para a função da Vercel e devolve a leitura. Conta o gasto mesmo quando a leitura falha. */
-export async function readWithAI(file: Blob): Promise<AIDoc> {
+/** Falha da leitura, com o que já se sabe do gasto (a Anthropic cobra mesmo quando a resposta vem cortada). */
+export class AIError extends Error {
+  costUsd: number
+  constructor(message: string, costUsd = 0) {
+    super(message)
+    this.costUsd = costUsd
+  }
+}
+
+/**
+ * Envia a imagem para a função da Vercel e devolve a leitura. Conta o gasto mesmo quando a leitura falha.
+ * `onStep` recebe o que está acontecendo, para a tela não ficar parada.
+ */
+export async function readWithAI(file: Blob, onStep?: (s: string) => void): Promise<AIRun> {
   const token = aiToken()
   if (!token) throw new AIError('Falta a senha de teste. Toque no balão vermelho para informar.')
-  const { image, mediaType } = await downscale(file)
+
+  onStep?.('Preparando a foto…')
+  const t0 = performance.now()
+  const { image, mediaType, width, height } = await downscale(file)
+  const kb = Math.round((image.length * 0.75) / 1024)
+  const prepMs = performance.now() - t0
+
+  onStep?.(`Enviando ${kb} KB e aguardando a IA…`)
+  const t1 = performance.now()
   const res = await fetch('/api/read', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-karo-token': token },
     body: JSON.stringify({ image, mediaType }),
   })
   const data = await res.json().catch(() => ({}))
+  const waitMs = performance.now() - t1
   if (data.usage) addStats(data.usage, data.costUsd ?? 0)
-  if (!res.ok) throw new AIError(data.error ?? `Erro ${res.status} ao chamar a IA.`)
-  return data.result as AIDoc
+  if (!res.ok) throw new AIError(data.error ?? `Erro ${res.status} ao chamar a IA.`, data.costUsd ?? 0)
+  return { doc: data.result as AIDoc, usage: data.usage, costUsd: data.costUsd ?? 0, dims: `${width}×${height}`, kb, prepMs, waitMs }
 }
