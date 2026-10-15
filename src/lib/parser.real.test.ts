@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseReceipt } from './parser'
+import { cleanMerchant, parseReceipt } from './parser'
 
 // Cupom real (SC, 13/10/2026): itens no formato "2 UNID 2,99 5,98", sem "x".
 const LIMPO = `E DE CASA SUPERMERCADOS LTDA - ARIRIU
@@ -38,14 +38,14 @@ describe('nome da loja', () => {
   })
   it('prefere a linha com cara de empresa', () => {
     const r = parseReceipt('Via do cliente\nMERCADO SAO JOSE LTDA\nCNPJ 33.030.242/0006-91')
-    expect(r.merchant).toBe('MERCADO SAO JOSE LTDA')
+    expect(r.merchant).toBe('Mercado Sao Jose')
   })
 })
 
 describe('cupom real E DE CASA', () => {
   it('lê o cupom limpo', () => {
     const r = parseReceipt(LIMPO)
-    expect(r.merchant).toBe('E DE CASA SUPERMERCADOS LTDA - ARIRIU')
+    expect(r.merchant).toBe('E de Casa Supermercados')
     expect(r.cnpj).toBe('33.030.242/0006-91')
     expect(r.date).toBe('2026-10-13')
     expect(r.totalCents).toBe(3995)
@@ -65,5 +65,14 @@ describe('cupom real E DE CASA', () => {
     expect(r.date).toBe('2026-10-13')
     expect(r.nfceKey).toHaveLength(44)
     expect(r.cnpj).toBe('33.030.242/0006-91')
+  })
+})
+
+describe('cleanMerchant', () => {
+  it('fica só com o nome da empresa', () => {
+    expect(cleanMerchant('AUTO ELETRICO JOAO LTDA ME')).toBe('Auto Eletrico Joao')
+    expect(cleanMerchant('POSTO SOL NASCENTE COMERCIO DE COMBUSTIVEIS S/A')).toBe('Posto Sol Nascente Comercio de Combustiveis')
+    expect(cleanMerchant('DROGARIA CENTRAL EIRELI CNPJ: 12.345.678/0001-90')).toBe('Drogaria Central')
+    expect(cleanMerchant('Padaria Pão Quente')).toBe('Padaria Pão Quente')
   })
 })

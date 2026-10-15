@@ -76,8 +76,9 @@ function svg() {
 
 mkdirSync('public', { recursive: true })
 writeFileSync('public/icon.svg', svg())
-writeFileSync('public/icon-192.png', raster(192, 1, null))
-writeFileSync('public/icon-512.png', raster(512, 1, null))
+// fundo azul do app em todos: ícone com transparência fica sobre fundo branco/cortado no Android
+writeFileSync('public/icon-192.png', raster(192, 0.82, [30, 27, 75]))
+writeFileSync('public/icon-512.png', raster(512, 0.82, [30, 27, 75]))
 writeFileSync('public/icon-maskable-512.png', raster(512, 0.62, [30, 27, 75]))
 writeFileSync('public/apple-touch-icon.png', raster(180, 0.8, [30, 27, 75]))
 console.log('ícones gerados em public/')

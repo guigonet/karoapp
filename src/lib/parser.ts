@@ -111,9 +111,24 @@ function findMerchant(lines: string[]) {
   return head.find((l) => BIZ.test(l)) ?? head[0] ?? ''
 }
 
+const SMALL = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'em'])
+
+/** Só o nome da empresa: sem LTDA/S.A./ME, sem filial/bairro depois do hífen, sem CNPJ, endereço ou telefone. */
+export function cleanMerchant(name: string) {
+  let n = name
+    .replace(/\s+[-–]\s+.*$/, '') // "... LTDA - ARIRIU" -> tira a filial/bairro
+    .replace(/\b(CNPJ|CPF|IE|FONE|TEL)\b.*$/i, '')
+  const cut = n.search(/\b(LTDA|LIMITADA|S\.?\s?\/?\s?A\.?|EIRELI|EPP|MEI|ME)\b\.?/i)
+  if (cut > 2) n = n.slice(0, cut)
+  n = n.replace(/[\d./\\|_,;:()]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!n) return name.trim()
+  return n.toLowerCase().split(' ').map((w, i) => (i && SMALL.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ')
+}
+
 export function parseReceipt(raw: string): ParsedReceipt {
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const merchant = findMerchant(lines)
+  const rawMerchant = findMerchant(lines)
+  const merchant = rawMerchant ? cleanMerchant(rawMerchant) : ''
   const nfceKey = findKey(raw)
   const items = lines.map(parseItem).filter((i): i is ReceiptItem => !!i)
   return {
@@ -124,7 +139,7 @@ export function parseReceipt(raw: string): ParsedReceipt {
     totalCents: findTotal(lines),
     items,
     // a loja define a categoria da nota; os itens (ex.: cigarro) guardam a própria
-    category: matchCategory(merchant) ?? items.map((i) => i.category).find(Boolean) ?? 'Outros',
+    category: matchCategory(rawMerchant) ?? items.map((i) => i.category).find(Boolean) ?? 'Outros',
   }
 }
 

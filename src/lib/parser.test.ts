@@ -18,7 +18,7 @@ TROCO 8,00`
 describe('parseReceipt', () => {
   const r = parseReceipt(CUPOM)
   it('lê loja, CNPJ e data', () => {
-    expect(r.merchant).toBe('SUPERMERCADO BOM PRECO LTDA')
+    expect(r.merchant).toBe('Supermercado Bom Preco')
     expect(r.cnpj).toBe('12.345.678/0001-90')
     expect(r.date).toBe('2025-03-12')
   })
